@@ -19,7 +19,7 @@ except Exception as e:
 print("Dados de previsão carregados com sucesso.\n")
 
 
-# --- 2. ASSUMPÇÕES E CLASSIFICAÇÃO DE ATIVOS ---
+# --- 2. CLASSIFICAÇÃO DE ATIVOS ---
 
 # 2.1. Definir Retorno e Volatilidade para a Renda Fixa (CDI)
 # Assumindo Selic de 10% a.a. -> ~0.038% ao dia (assumindo 252 dias úteis)
@@ -109,11 +109,19 @@ for nome_carteira, alocacao in portfolios.items():
             print("AVISO: Nenhum ativo de Renda Variável com Retorno/Risco positivo encontrado. Alocando em CDI.")
             carteira_detalhada.append(('CDI', peso_total_rv)) # Aloca o peso extra no CDI
         else:
-            peso_por_ativo_rv = peso_total_rv / len(ativos_rv_selecionados)
-            print(f"\nAlocando {peso_total_rv*100:.0f}% em Renda Variável (Top {len(ativos_rv_selecionados)}):")
-            for ticker in ativos_rv_selecionados.index:
-                print(f"  - {ticker}: {peso_por_ativo_rv*100:.2f}%")
-                carteira_detalhada.append((ticker, peso_por_ativo_rv))
+            # Alocação ponderada por Retorno/Risco
+            print(f"\nAlocando {peso_total_rv*100:.0f}% em Renda Variável (Top {len(ativos_rv_selecionados)} ponderado por Risco/Retorno):")
+            
+            # 1. Calcula a soma dos ratios dos ativos selecionados
+            soma_ratios_rv = ativos_rv_selecionados['Retorno_Vol_Ratio'].sum()
+            
+            # 2. Itera e calcula o peso proporcional
+            for ticker, row in ativos_rv_selecionados.iterrows():
+                proporcao = row['Retorno_Vol_Ratio'] / soma_ratios_rv
+                peso_final_ativo = proporcao * peso_total_rv
+                
+                print(f"  - {ticker} (Ratio: {row['Retorno_Vol_Ratio']:.4f}): {peso_final_ativo*100:.2f}%")
+                carteira_detalhada.append((ticker, peso_final_ativo))
             
     # 3. Alocação em Cripto
     peso_total_cripto = alocacao['Cripto']
@@ -123,11 +131,19 @@ for nome_carteira, alocacao in portfolios.items():
             print("AVISO: Nenhuma Cripto com Retorno/Risco positivo encontrada. Alocando em CDI.")
             carteira_detalhada.append(('CDI', peso_total_cripto)) # Aloca o peso extra no CDI
         else:
-            peso_por_ativo_cripto = peso_total_cripto / len(ativos_cripto_selecionados)
-            print(f"\nAlocando {peso_total_cripto*100:.0f}% em Cripto (Top {len(ativos_cripto_selecionados)}):")
-            for ticker in ativos_cripto_selecionados.index:
-                print(f"  - {ticker}: {peso_por_ativo_cripto*100:.2f}%")
-                carteira_detalhada.append((ticker, peso_por_ativo_cripto))
+            # Alocação ponderada por Retorno/Risco
+            print(f"\nAlocando {peso_total_cripto*100:.0f}% em Cripto (Top {len(ativos_cripto_selecionados)} ponderado por Risco/Retorno):")
+            
+            # 1. Calcula a soma dos ratios
+            soma_ratios_cripto = ativos_cripto_selecionados['Retorno_Vol_Ratio'].sum()
+            
+            # 2. Itera e calcula o peso proporcional
+            for ticker, row in ativos_cripto_selecionados.iterrows():
+                proporcao = row['Retorno_Vol_Ratio'] / soma_ratios_cripto
+                peso_final_ativo = proporcao * peso_total_cripto
+                
+                print(f"  - {ticker} (Ratio: {row['Retorno_Vol_Ratio']:.4f}): {peso_final_ativo*100:.2f}%")
+                carteira_detalhada.append((ticker, peso_final_ativo))
             
     # 4. Cálculo Ponderado da Carteira
     retorno_carteira = 0.0
@@ -137,8 +153,10 @@ for nome_carteira, alocacao in portfolios.items():
     carteira_grafico = {}
     
     for ticker, peso in carteira_detalhada:
-        retorno_ativo = df_resultados.loc[ticker, 'Retorno_Medio_42d']
-        vol_ativo = df_resultados.loc[ticker, 'Volatilidade_Media_42d']
+        # Pega os dados do ticker, tratando caso ele não esteja mais no df (improvável)
+        dados_ativo = df_resultados.loc[ticker]
+        retorno_ativo = dados_ativo['Retorno_Medio_42d']
+        vol_ativo = dados_ativo['Volatilidade_Media_42d']
         
         retorno_carteira += peso * retorno_ativo
         volatilidade_carteira += peso * vol_ativo
@@ -173,7 +191,7 @@ for nome_carteira, alocacao in portfolios.items():
 
     ax.set_title(f"Composição da Carteira: {nome_carteira}", fontsize=16, pad=20)
     
-    # --- BLOCO MODIFICADO: Adiciona o texto com os resultados ponderados acima da legenda ---
+    # Adiciona o texto com os resultados ponderados acima da legenda ---
     texto_resultado = (
         f"Resultados Esperados (42d):\n"
         f"Retorno: {retorno_carteira:.4f}%\n"
@@ -189,7 +207,6 @@ for nome_carteira, alocacao in portfolios.items():
         horizontalalignment='left', # Alinhamento horizontal esquerdo
         bbox={"boxstyle": "round,pad=0.5", "facecolor": "white", "edgecolor": "lightgray", "alpha": 0.9} # Caixa de texto melhorada
     )
-    # --- FIM DO BLOCO MODIFICADO ---
 
     # Adiciona legenda dos ativos
     ax.legend(
@@ -208,4 +225,4 @@ for nome_carteira, alocacao in portfolios.items():
     nome_grafico = f"carteira_{nome_carteira.lower()}.png"
     plt.savefig(nome_grafico, dpi=300) # Aumenta o DPI para melhor qualidade
     print(f"Gráfico salvo como: '{nome_grafico}'")
-    plt.close(fig)
+    plt.close(fig) # Fecha a figura
